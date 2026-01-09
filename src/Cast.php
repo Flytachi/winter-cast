@@ -10,16 +10,68 @@ use Flytachi\Winter\Cast\Common\CastResponse;
 use Flytachi\Winter\Cast\Exception\CastException;
 
 /**
- * Class Cast
+ * A static facade providing a simple, zero-configuration entry point for making HTTP requests.
  *
- * A static facade providing a simple, zero-configuration entry point for making
- * HTTP requests. It offers a convenient way to send requests for basic use cases
- * without needing to manually instantiate a client.
+ * The Cast facade offers the most convenient way to make HTTP requests without needing to
+ * manually instantiate clients or manage dependencies. It maintains a global singleton
+ * CastClient instance that is shared across all requests.
  *
- * For advanced usage, such as dependency injection or custom client configuration,
- * it is recommended to use CastClient and CastRequest directly.
+ * For advanced usage such as dependency injection, custom timeouts, or multiple client
+ * configurations, it is recommended to use CastClient and CastRequest directly.
  *
- * @version 1.0
+ * ---
+ * ### Example 1: Simple GET request
+ *
+ * ```
+ * use Flytachi\Winter\Cast\Cast;
+ *
+ * // One-liner - send immediately
+ * $response = Cast::sendGet('https://api.com/users');
+ * $users = $response->json();
+ *
+ * // Or build request first
+ * $response = Cast::get('https://api.com/users')
+ *     ->withHeaders(
+ *         CastHeader::instance()->json()->authBearer($token)
+ *     )
+ *     ->send();
+ * ```
+ *
+ * ---
+ * ### Example 2: POST/PUT with JSON body
+ *
+ * ```
+ * $response = Cast::post('https://api.com/users')
+ *     ->withHeaders(CastHeader::instance()->json())
+ *     ->withJsonBody([
+ *         'name' => 'John Doe',
+ *         'email' => 'john@example.com'
+ *     ])
+ *     ->send();
+ *
+ * if ($response->isSuccess()) {
+ *     $newUser = $response->json();
+ *     echo "Created user with ID: {$newUser['id']}";
+ * }
+ * ```
+ *
+ * ---
+ * ### Example 3: With custom global client
+ *
+ * ```
+ * // Configure global client with custom timeouts
+ * $customClient = new CastClient(
+ *     defaultTimeout: 30,
+ *     defaultConnectTimeout: 10
+ * );
+ * Cast::setGlobalClient($customClient);
+ *
+ * // All subsequent requests use custom client
+ * $response = Cast::sendGet('https://slow-api.com/data');
+ * ```
+ * ---
+ *
+ * @package Flytachi\Winter\Cast
  * @author Flytachi
  *
  * @method static CastRequest get(string $url, ?array $queryParams = null)
@@ -34,7 +86,11 @@ use Flytachi\Winter\Cast\Exception\CastException;
  * @method static CastResponse sendPut(string $url, ?array $queryParams = null)
  * @method static CastResponse sendPatch(string $url, ?array $queryParams = null)
  * @method static CastResponse sendDelete(string $url, ?array $queryParams = null)
- * @method static CastResponse sendHead(string $url, ?array $queryParams = null):
+ * @method static CastResponse sendHead(string $url, ?array $queryParams = null)
+ *
+ * @see CastClient
+ * @see CastRequest
+ * @see CastResponse
  */
 final class Cast
 {
@@ -48,7 +104,6 @@ final class Cast
     public static function getGlobalClient(): CastClient
     {
         if (self::$globalClient === null) {
-            // Creates a client with the default responsive timeouts we discussed.
             self::$globalClient = new CastClient();
         }
         return self::$globalClient;
@@ -79,7 +134,6 @@ final class Cast
      */
     public static function __callStatic(string $method, array $args): CastRequest|CastResponse
     {
-        // This allows creating a request and sending it immediately.
         $buildMethods = ['get', 'post', 'put', 'patch', 'delete', 'head'];
         if (in_array($method, $buildMethods)) {
             return CastRequest::$method(...$args);
@@ -87,14 +141,10 @@ final class Cast
 
         $sendPrefix = 'send';
         if (str_starts_with($method, $sendPrefix)) {
-            // Extract the actual method name: "sendGet" -> "get"
-            $requestMethod = lcfirst(substr($method, strlen($sendPrefix))); // "Get" -> "get"
+            $requestMethod = lcfirst(substr($method, strlen($sendPrefix)));
 
             if (in_array($requestMethod, $buildMethods)) {
-                // 1. Create the CastRequest object
                 $request = CastRequest::$requestMethod(...$args);
-
-                // 2. Immediately send it using the global client
                 return $request->send(self::getGlobalClient());
             }
         }

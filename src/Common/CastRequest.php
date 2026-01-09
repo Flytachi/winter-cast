@@ -8,15 +8,84 @@ use Flytachi\Winter\Cast\Cast;
 use Flytachi\Winter\Cast\Exception\CastException;
 
 /**
- * Class CastRequest
+ * Fluent builder for constructing and configuring HTTP requests.
  *
- * A fluent interface for building an HTTP request. This class allows you to
- * chain methods to configure every aspect of a request, such as the HTTP method,
- * URL, headers, body, and timeouts. Once configured, the request can be
- * sent via a CastClient.
+ * CastRequest provides a chainable API for building HTTP requests with full control
+ * over method, URL, headers, body, timeouts, retries, and error handling. Requests
+ * are immutable once created and can be sent via a CastClient instance.
  *
- * @version 1.0
+ * The class uses static factory methods for each HTTP verb (get, post, put, patch,
+ * delete, head), ensuring type-safe request creation. All configuration methods
+ * return `$this` for method chaining.
+ *
+ * ---
+ * ### Example 1: Simple GET request with query parameters
+ *
+ * ```
+ * use Flytachi\Winter\Cast\Common\CastRequest;
+ *
+ * $response = CastRequest::get('https://api.com/users', ['page' => 1, 'limit' => 10])
+ *     ->timeout(5)
+ *     ->send();
+ *
+ * // Or add query params dynamically
+ * $request = CastRequest::get('https://api.com/users')
+ *     ->withQueryParam('page', 1)
+ *     ->withQueryParam('limit', 10);
+ * ```
+ *
+ * ---
+ * ### Example 2: POST with JSON body and authentication
+ *
+ * ```
+ * $response = CastRequest::post('https://api.com/users')
+ *     ->withHeaders(
+ *         CastHeader::instance()
+ *             ->json()
+ *             ->authBearer($token)
+ *             ->userAgent('MyApp/1.0')
+ *     )
+ *     ->withJsonBody([
+ *         'name' => 'John Doe',
+ *         'email' => 'john@example.com'
+ *     ])
+ *     ->throwOnError()
+ *     ->send();
+ * ```
+ *
+ * ---
+ * ### Example 3: File upload with multipart form data
+ *
+ * ```
+ * $response = CastRequest::post('https://api.com/upload')
+ *     ->withMultipartBody([
+ *         'file' => new CURLFile('/path/to/file.jpg', 'image/jpeg'),
+ *         'title' => 'My Photo',
+ *         'description' => 'A beautiful sunset'
+ *     ])
+ *     ->maxResponseSize(50 * 1024 * 1024) // 50MB limit
+ *     ->timeout(60)
+ *     ->send();
+ * ```
+ *
+ * ---
+ * ### Example 4: Retry on failure with custom timeouts
+ *
+ * ```
+ * $response = CastRequest::get('https://unreliable-api.com/data')
+ *     ->timeout(10)
+ *     ->connectTimeout(3)
+ *     ->retry(3, 1000) // 3 retries, 1 second delay
+ *     ->send();
+ * ```
+ * ---
+ *
+ * @package Flytachi\Winter\Cast\Common
  * @author Flytachi
+ *
+ * @see CastClient
+ * @see CastResponse
+ * @see CastHeader
  */
 class CastRequest
 {
@@ -36,6 +105,7 @@ class CastRequest
 
     /**
      * Private constructor to force usage of static factory methods.
+     * @throws CastException
      */
     private function __construct(string $method, string $url)
     {
@@ -56,35 +126,54 @@ class CastRequest
 
         $this->method = $method;
         $this->url = $url;
+
     }
 
     // --- Static Factory Methods ---
 
+    /**
+     * @throws CastException
+     */
     public static function get(string $url, ?array $queryParams = null): self
     {
         return new self('GET', self::buildUrl($url, $queryParams));
     }
 
+    /**
+     * @throws CastException
+     */
     public static function post(string $url, ?array $queryParams = null): self
     {
         return new self('POST', self::buildUrl($url, $queryParams));
     }
 
+    /**
+     * @throws CastException
+     */
     public static function put(string $url, ?array $queryParams = null): self
     {
         return new self('PUT', self::buildUrl($url, $queryParams));
     }
 
+    /**
+     * @throws CastException
+     */
     public static function patch(string $url, ?array $queryParams = null): self
     {
         return new self('PATCH', self::buildUrl($url, $queryParams));
     }
 
+    /**
+     * @throws CastException
+     */
     public static function delete(string $url, ?array $queryParams = null): self
     {
         return new self('DELETE', self::buildUrl($url, $queryParams));
     }
 
+    /**
+     * @throws CastException
+     */
     public static function head(string $url, ?array $queryParams = null): self
     {
         return new self('HEAD', self::buildUrl($url, $queryParams));
@@ -136,16 +225,9 @@ class CastRequest
      */
     public function withMultipartBody(array $data): self
     {
-        // For multipart, the body IS the array. cURL handles the encoding.
         $this->body = $data;
         $this->isMultipart = true;
-
-        // When using multipart/form-data, cURL sets the Content-Type header automatically,
-        // including the correct boundary. We must NOT set it manually.
-        if ($this->headers !== null) {
-            $this->headers->remove('Content-Type');
-        }
-
+        $this->headers?->remove('Content-Type');
         return $this;
     }
 
@@ -314,7 +396,8 @@ class CastRequest
             return $url;
         }
         $queryString = http_build_query($queryParams);
-        // Check if the URL already has a query string
-        return str_contains($url, '?') ? "{$url}&{$queryString}" : "{$url}?{$queryString}";
+        return str_contains($url, '?')
+            ? "{$url}&{$queryString}"
+            : "{$url}?{$queryString}";
     }
 }

@@ -4,6 +4,52 @@ declare(strict_types=1);
 
 namespace Flytachi\Winter\Cast\Common;
 
+/**
+ * Fluent builder for constructing HTTP request headers.
+ *
+ * CastHeader provides a chainable, type-safe API for building HTTP headers
+ * with convenient helper methods for common headers like Authorization,
+ * Content-Type, Accept, and User-Agent.
+ *
+ * All methods return `$this`, enabling method chaining for a clean,
+ * expressive syntax when building complex header sets.
+ *
+ * ---
+ * ### Example 1: JSON API request with authentication
+ *
+ * ```
+ * use Flytachi\Winter\Cast\Common\CastHeader;
+ *
+ * $headers = CastHeader::instance()
+ *     ->json()                    // Accept + Content-Type: application/json
+ *     ->authBearer($token)        // Authorization: Bearer ...
+ *     ->acceptLanguage('ru')      // Accept-Language: ru
+ *     ->userAgent('MyApp/1.0');   // User-Agent: MyApp/1.0
+ * ```
+ *
+ * ---
+ * ### Example 2: Custom headers
+ *
+ * ```
+ * $headers = CastHeader::instance()
+ *     ->set('X-API-Key', 'secret-key')
+ *     ->set('X-Request-ID', uniqid())
+ *     ->referer('https://example.com');
+ * ```
+ *
+ * ---
+ * ### Example 3: Basic authentication
+ *
+ * ```
+ * $headers = CastHeader::instance()
+ *     ->authBasic('username', 'password')
+ *     ->contentType('application/xml');
+ * ```
+ * ---
+ *
+ * @package Flytachi\Winter\Cast\Common
+ * @author Flytachi
+ */
 class CastHeader
 {
     private array $headers = [];

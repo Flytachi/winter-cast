@@ -7,14 +7,91 @@ namespace Flytachi\Winter\Cast\Common;
 use Flytachi\Winter\Base\HttpCode;
 
 /**
- * Class CastResponse
+ * Immutable Data Transfer Object representing an HTTP response.
  *
- * Represents the result of an executed HTTP request.
- * This is an immutable Data Transfer Object (DTO) that encapsulates all
- * information about the response, including the status code, headers, body,
- * and technical details from the cURL transfer.
+ * CastResponse encapsulates all information about an HTTP response, including
+ * the status code, body, headers, and detailed cURL transfer information.
+ * Being a `readonly` class, all properties are immutable after construction,
+ * ensuring thread-safety and preventing accidental modifications.
  *
+ * The class provides convenient helper methods for common operations such as
+ * JSON decoding, status checking, and header retrieval.
+ *
+ * ---
+ * ### Example 1: Parsing JSON responses
+ *
+ * ```
+ * use Flytachi\Winter\Cast\Cast;
+ *
+ * $response = Cast::sendGet('https://api.com/users/123');
+ *
+ * if ($response->isSuccess()) {
+ *     $user = $response->json();
+ *     echo "User: {$user['name']}";
+ * }
+ * ```
+ *
+ * ---
+ * ### Example 2: Checking different status types
+ *
+ * ```
+ * $response = Cast::sendPost('https://api.com/data', ['foo' => 'bar']);
+ *
+ * if ($response->isSuccess()) {
+ *     // 2xx - success
+ *     echo "Data saved successfully";
+ * } elseif ($response->isClientError()) {
+ *     // 4xx - client error (bad request, unauthorized, etc.)
+ *     echo "Client error: {$response->statusCode}";
+ * } elseif ($response->isServerError()) {
+ *     // 5xx - server error
+ *     echo "Server error: {$response->statusCode}";
+ * } elseif ($response->isConnectionError()) {
+ *     // Connection failed (statusCode = 0)
+ *     echo "Connection error - server unreachable";
+ * }
+ * ```
+ *
+ * ---
+ * ### Example 3: Accessing headers and metadata
+ *
+ * ```
+ * $response = Cast::sendGet('https://api.com/data');
+ *
+ * // Get specific header
+ * $contentType = $response->header('Content-Type');
+ * $rateLimit = $response->header('X-RateLimit-Remaining');
+ *
+ * // Get HTTP status enum
+ * $status = $response->status(); // Returns HttpCode enum
+ * echo $status->value; // 200
+ *
+ * // Get cURL info
+ * $transferTime = $response->info()['total_time'] ?? 0;
+ * echo "Request took {$transferTime} seconds";
+ * ```
+ *
+ * ---
+ * ### Example 4: Raw body access
+ *
+ * ```
+ * $response = Cast::sendGet('https://api.com/file.txt');
+ *
+ * // Get raw body
+ * $content = $response->body();
+ * file_put_contents('/tmp/downloaded.txt', $content);
+ *
+ * // Or use directly
+ * echo $response->body();
+ * ```
+ * ---
+ *
+ * @package Flytachi\Winter\Cast\Common
  * @author Flytachi
+ *
+ * @see CastRequest
+ * @see CastClient
+ * @see HttpCode
  */
 readonly class CastResponse
 {
@@ -61,7 +138,6 @@ readonly class CastResponse
             return null;
         }
 
-        // Use json_validate() from PHP 8.3 for a fast check before decoding.
         if (function_exists('json_validate') && !json_validate($this->body)) {
             return null;
         }
