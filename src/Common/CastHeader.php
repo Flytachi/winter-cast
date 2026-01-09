@@ -78,7 +78,8 @@ class CastHeader
 
     public function authBasic(string $username, string $password): self
     {
-        return $this->set('Authorization',
+        return $this->set(
+            'Authorization',
             'Basic ' . base64_encode($username . ':' . $password)
         );
     }

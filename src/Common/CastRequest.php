@@ -126,7 +126,6 @@ class CastRequest
 
         $this->method = $method;
         $this->url = $url;
-
     }
 
     // --- Static Factory Methods ---

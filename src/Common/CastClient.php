@@ -103,11 +103,10 @@ class CastClient
      * @param array $defaultOptions Default cURL options to apply to all requests.
      */
     public function __construct(
-        private readonly int   $defaultTimeout = 10,
-        private readonly int   $defaultConnectTimeout = 5,
+        private readonly int $defaultTimeout = 10,
+        private readonly int $defaultConnectTimeout = 5,
         private readonly array $defaultOptions = []
-    )
-    {
+    ) {
         $this->logger = LoggerRegistry::instance('CastClient');
     }
 
@@ -168,16 +167,16 @@ class CastClient
 
                     throw match (true) {
                         // Timeout
-                        in_array($curlErrno, [CURLE_OPERATION_TIMEDOUT, CURLE_OPERATION_TIMEOUTED], true) 
+                        in_array($curlErrno, [CURLE_OPERATION_TIMEDOUT, CURLE_OPERATION_TIMEOUTED], true)
                             => new TimeoutException("Request timed out: {$curlError}", $curlErrno),
 
                         // Connection
                         in_array($curlErrno, [
-                            CURLE_COULDNT_CONNECT, 
-                            CURLE_COULDNT_RESOLVE_HOST, 
+                            CURLE_COULDNT_CONNECT,
+                            CURLE_COULDNT_RESOLVE_HOST,
                             CURLE_COULDNT_RESOLVE_PROXY,
                             CURLE_GOT_NOTHING
-                        ], true) 
+                        ], true)
                             => new ConnectionException("Connection failed: {$curlError}", $curlErrno),
 
                         default => new CastException("cURL Error (errno {$curlErrno}): {$curlError}", $curlErrno)
@@ -186,7 +185,6 @@ class CastClient
 
                 $lastException = null;
                 break;
-
             } catch (CastException $e) {
                 $lastException = $e;
                 if ($attempts > 0) {
@@ -266,8 +264,7 @@ class CastClient
         $body = $request->getBody();
         if ($request->isMultipart()) {
             $options[CURLOPT_POSTFIELDS] = $body;
-        }
-        elseif ($body !== null && $body !== '') {
+        } elseif ($body !== null && $body !== '') {
             $options[CURLOPT_POSTFIELDS] = $body;
         }
 
