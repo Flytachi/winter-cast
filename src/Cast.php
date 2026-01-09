@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Flytachi\Winter\Cast;
 
 use Flytachi\Winter\Cast\Common\CastClient;
-use Flytachi\Winter\Cast\Common\CastException;
 use Flytachi\Winter\Cast\Common\CastRequest;
 use Flytachi\Winter\Cast\Common\CastResponse;
+use Flytachi\Winter\Cast\Exception\CastException;
 
 /**
  * Class Cast

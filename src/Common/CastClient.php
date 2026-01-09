@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Flytachi\Winter\Cast\Common;
 
 use CurlHandle;
+use Flytachi\Winter\Cast\Exception\CastException;
 
 /**
  * Class CastClient
@@ -79,8 +80,25 @@ class CastClient
                 if ($responseBody === false) {
                     $curlErrno = curl_errno($curlHandle);
                     $curlError = curl_error($curlHandle);
-                    // Throw a specific exception for connection errors
-                    throw new CastException("cURL Error (errno {$curlErrno}): {$curlError}", 0);
+                    
+                    // Throw specific exception based on error type
+                    throw match (true) {
+                        // Timeout errors
+                        in_array($curlErrno, [CURLE_OPERATION_TIMEDOUT, CURLE_OPERATION_TIMEOUTED], true) 
+                            => new \Flytachi\Winter\Cast\Exception\TimeoutException("Request timed out: {$curlError}", $curlErrno),
+                        
+                        // Connection errors
+                        in_array($curlErrno, [
+                            CURLE_COULDNT_CONNECT, 
+                            CURLE_COULDNT_RESOLVE_HOST, 
+                            CURLE_COULDNT_RESOLVE_PROXY,
+                            CURLE_GOT_NOTHING
+                        ], true) 
+                            => new \Flytachi\Winter\Cast\Exception\ConnectionException("Connection failed: {$curlError}", $curlErrno),
+                        
+                        // Generic error for everything else
+                        default => new CastException("cURL Error (errno {$curlErrno}): {$curlError}", $curlErrno)
+                    };
                 }
 
                 // If we are here, the request was successful at the transport level.
@@ -107,12 +125,19 @@ class CastClient
         }
 
         $info = curl_getinfo($curlHandle);
-        return new CastResponse(
+        $response = new CastResponse(
             statusCode: $info['http_code'] ?? 0,
             body: $responseBody ?? null,
             headers: $headerData ?? [],
             info: $info
         );
+
+        if ($request->shouldThrowOnError() && !$response->isSuccess()) {
+            $message = "HTTP Error {$response->statusCode}: " . ($response->body() ?? 'No response body');
+            throw new \Flytachi\Winter\Cast\Exception\RequestException($response, $message);
+        }
+
+        return $response;
     }
 
     /**
@@ -136,6 +161,12 @@ class CastClient
             CURLOPT_MAXREDIRS => 10,
             CURLOPT_ENCODING => '', // Allow cURL to handle compressed responses (e.g., gzip)
         ];
+
+        // Apply max response size limit if set
+        $maxSize = $request->getMaxResponseSize();
+        if ($maxSize !== null) {
+            $options[CURLOPT_MAXFILESIZE] = $maxSize;
+        }
 
         // Add body for relevant methods.
         // Note: GET requests can have a body, but it's non-standard. We allow it.

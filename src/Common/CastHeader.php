@@ -8,6 +8,11 @@ class CastHeader
 {
     private array $headers = [];
 
+    public static function instance(): self
+    {
+        return (new self());
+    }
+
     public function set(string $key, string $value): self
     {
         $this->headers[$key] = $value;
@@ -20,21 +25,42 @@ class CastHeader
         return $this;
     }
 
-    public static function authBearer(string $token): self
+    public function authBearer(string $token): self
     {
-        return (new self)->set('Authorization', 'Bearer ' . $token);
+        return $this->set('Authorization', 'Bearer ' . $token);
     }
 
-    public static function authBasic(string $username, string $password): self
+    public function authBasic(string $username, string $password): self
     {
-        return (new self)->set('Authorization',
+        return $this->set('Authorization',
             'Basic ' . base64_encode($username . ':' . $password)
         );
     }
 
-    public static function acceptJson(): self
+    public function json(): self
     {
-        return (new self)->set('Accept', 'application/json');
+        return $this->set('Accept', 'application/json')
+            ->set('Content-Type', 'application/json');
+    }
+
+    public function userAgent(string $agent): self
+    {
+        return $this->set('User-Agent', $agent);
+    }
+
+    public function acceptLanguage(string $language): self
+    {
+        return $this->set('Accept-Language', $language);
+    }
+
+    public function referer(string $url): self
+    {
+        return $this->set('Referer', $url);
+    }
+
+    public function contentType(string $type): self
+    {
+        return $this->set('Content-Type', $type);
     }
 
     public function toArray(): array

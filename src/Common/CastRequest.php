@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Flytachi\Winter\Cast\Common;
 
 use Flytachi\Winter\Cast\Cast;
+use Flytachi\Winter\Cast\Exception\CastException;
 
 /**
  * Class CastRequest
@@ -28,6 +29,9 @@ class CastRequest
     private ?int $connectTimeout = null;
     private int $retryCount = 1;
     private int $retryDelay = 500; // in milliseconds
+    private ?int $maxResponseSize = 10_485_760; // 10MB default
+    private bool $throwOnError = false;
+    private array $queryParams = [];
     private array $options = [];
 
     /**
@@ -35,6 +39,21 @@ class CastRequest
      */
     private function __construct(string $method, string $url)
     {
+        // Validate URL
+        if (empty($url)) {
+            throw new CastException("URL cannot be empty");
+        }
+
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        if ($scheme === null || $scheme === false) {
+            throw new CastException("Invalid URL format: missing or invalid protocol");
+        }
+
+        $scheme = strtolower($scheme);
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new CastException("Only HTTP and HTTPS protocols are allowed, got: {$scheme}");
+        }
+
         $this->method = $method;
         $this->url = $url;
     }
@@ -149,6 +168,57 @@ class CastRequest
         return $this;
     }
 
+    /**
+     * Set maximum response size in bytes.
+     * Pass null to disable the limit (use with caution).
+     *
+     * @param int|null $bytes Maximum response size in bytes, or null to disable
+     * @return $this
+     */
+    public function maxResponseSize(?int $bytes): self
+    {
+        $this->maxResponseSize = $bytes !== null ? max(0, $bytes) : null;
+        return $this;
+    }
+
+    /**
+     * Enable throwing exceptions on HTTP errors (4xx and 5xx responses).
+     * By default, errors are returned as CastResponse objects without throwing.
+     *
+     * @param bool $throw Whether to throw exceptions on HTTP errors
+     * @return $this
+     */
+    public function throwOnError(bool $throw = true): self
+    {
+        $this->throwOnError = $throw;
+        return $this;
+    }
+
+    /**
+     * Add a single query parameter.
+     *
+     * @param string $key Query parameter name
+     * @param mixed $value Query parameter value
+     * @return $this
+     */
+    public function withQueryParam(string $key, mixed $value): self
+    {
+        $this->queryParams[$key] = $value;
+        return $this;
+    }
+
+    /**
+     * Add multiple query parameters.
+     *
+     * @param array $params Associative array of query parameters
+     * @return $this
+     */
+    public function withQueryParams(array $params): self
+    {
+        $this->queryParams = array_merge($this->queryParams, $params);
+        return $this;
+    }
+
     public function withOptions(array $options): self
     {
         $this->options = array_replace($this->options, $options);
@@ -164,7 +234,8 @@ class CastRequest
 
     public function getUrl(): string
     {
-        return $this->url;
+        // Build URL with dynamic query parameters if any
+        return self::buildUrl($this->url, $this->queryParams);
     }
 
     public function getHeaders(): CastHeader
@@ -197,6 +268,15 @@ class CastRequest
         return $this->retryDelay;
     }
 
+    public function getMaxResponseSize(): ?int
+    {
+        return $this->maxResponseSize;
+    }
+
+    public function shouldThrowOnError(): bool
+    {
+        return $this->throwOnError;
+    }
 
     public function getOptions(): array
     {
