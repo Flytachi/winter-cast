@@ -1,0 +1,25 @@
+{
+    "name": "flytachi/winter-cast",
+    "description": "Winter framework cast component",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Flytachi\\Winter\\Cast\\": "src/"
+        }
+    },
+    "require": {
+        "php": ">=8.3",
+        "flytachi/winter-base": "^1.0",
+        "ext-curl": "*"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "@stable"
+    },
+    "authors": [
+        {
+            "name": "Flytachi",
+            "email": "jasur.rakhmatov03@gmail.com"
+        }
+    ]
+}
