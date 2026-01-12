@@ -221,7 +221,7 @@ class CastClient
         ]);
 
         if ($request->shouldThrowOnError() && !$response->isSuccess()) {
-            $this->logger->debug('Request returned error status', [
+            $this->logger->critical('Request returned error status', [
                 'method' => $request->getMethod(),
                 'url' => $request->getUrl(),
                 'status' => $response->statusCode,
