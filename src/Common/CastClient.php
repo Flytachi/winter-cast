@@ -158,7 +158,7 @@ class CastClient
                     $curlErrno = curl_errno($curlHandle);
                     $curlError = curl_error($curlHandle);
 
-                    $this->logger->debug('Failed request', [
+                    $this->logger->critical('Failed request', [
                         'method' => $request->getMethod(),
                         'url' => $request->getUrl(),
                         'curl_errno' => $curlErrno,
