@@ -11,6 +11,7 @@ use Flytachi\Winter\Cast\Exception\ConnectionException;
 use Flytachi\Winter\Cast\Exception\RequestException;
 use Flytachi\Winter\Cast\Exception\TimeoutException;
 use Psr\Log\LoggerInterface;
+use Random\RandomException;
 
 /**
  * The core HTTP client engine that executes requests using cURL.
@@ -188,21 +189,24 @@ class CastClient
             } catch (CastException $e) {
                 $lastException = $e;
                 if ($attempts > 0) {
+                    $attemptNumber = $request->getRetryCount() - $attempts - 1;
+                    $delay = $this->calculateRetryDelay($request, $attemptNumber);
+
                     $this->logger->debug('Failed request, retrying', [
                         'method' => $request->getMethod(),
                         'url' => $request->getUrl(),
                         'error' => $e->getMessage(),
                         'attempts_left' => $attempts,
-                        'retry_delay' => $request->getRetryDelay(),
+                        'retry_delay_ms' => $delay,
+                        'exponential_backoff' => $request->useExponentialBackoff(),
                     ]);
-                    usleep($request->getRetryDelay() * 1000);
+                    usleep($delay * 1000);
                     continue;
                 }
             }
         }
 
         if ($lastException !== null) {
-            curl_close($curlHandle);
             throw $lastException;
         }
 
@@ -271,5 +275,36 @@ class CastClient
         $options += $request->getOptions();
         curl_setopt_array($curlHandle, $options);
         return $curlHandle;
+    }
+
+    /**
+     * Calculates the delay before the next retry attempt.
+     *
+     * When exponential backoff is enabled, the delay doubles with each attempt
+     * and includes random jitter (±30%) to prevent thundering herd problems.
+     *
+     * @param CastRequest $request The request configuration
+     * @param int $attemptNumber Zero-based attempt number (0 = first retry)
+     * @return int Delay in milliseconds
+     */
+    private function calculateRetryDelay(CastRequest $request, int $attemptNumber): int
+    {
+        $baseDelay = $request->getRetryDelay();
+
+        if (!$request->useExponentialBackoff()) {
+            return $baseDelay;
+        }
+
+        // Exponential: delay × 2^attempt (500 → 1000 → 2000 → 4000...)
+        $delay = $baseDelay * (2 ** $attemptNumber);
+
+        // Add jitter: ±30% randomization to prevent thundering herd
+        $jitterRange = (int) ($delay * 0.3);
+        if ($jitterRange > 0) {
+            $delay += random_int(-$jitterRange, $jitterRange);
+        }
+
+        // Ensure delay is never negative
+        return max(0, $delay);
     }
 }

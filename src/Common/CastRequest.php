@@ -11,12 +11,13 @@ use Flytachi\Winter\Cast\Exception\CastException;
  * Fluent builder for constructing and configuring HTTP requests.
  *
  * CastRequest provides a chainable API for building HTTP requests with full control
- * over method, URL, headers, body, timeouts, retries, and error handling. Requests
- * are immutable once created and can be sent via a CastClient instance.
+ * over method, URL, headers, body, timeouts, retries, and error handling.
+ *
+ * The class is fully immutable — all configuration methods return a new instance,
+ * leaving the original unchanged. This enables safe request reuse and composition.
  *
  * The class uses static factory methods for each HTTP verb (get, post, put, patch,
- * delete, head), ensuring type-safe request creation. All configuration methods
- * return `$this` for method chaining.
+ * delete, head), ensuring type-safe request creation.
  *
  * ---
  * ### Example 1: Simple GET request with query parameters
@@ -69,13 +70,19 @@ use Flytachi\Winter\Cast\Exception\CastException;
  * ```
  *
  * ---
- * ### Example 4: Retry on failure with custom timeouts
+ * ### Example 4: Retry on failure with exponential backoff
  *
  * ```
+ * // Exponential backoff (default): delays grow 500ms → 1000ms → 2000ms + jitter
  * $response = CastRequest::get('https://unreliable-api.com/data')
  *     ->timeout(10)
  *     ->connectTimeout(3)
- *     ->retry(3, 1000) // 3 retries, 1 second delay
+ *     ->retry(3, 500) // 3 retries, 500ms base delay, exponential backoff enabled
+ *     ->send();
+ *
+ * // Fixed delay (legacy): constant 1 second between retries
+ * $response = CastRequest::get('https://api.com/data')
+ *     ->retry(3, 1000, exponentialBackoff: false)
  *     ->send();
  * ```
  * ---
@@ -97,7 +104,8 @@ class CastRequest
     private ?int $timeout = null;
     private ?int $connectTimeout = null;
     private int $retryCount = 1;
-    private int $retryDelay = 500; // in milliseconds
+    private int $retryDelay = 500; // base delay in milliseconds
+    private bool $exponentialBackoff = true;
     private ?int $maxResponseSize = 10_485_760; // 10MB default
     private bool $throwOnError = false;
     private array $queryParams = [];
@@ -182,35 +190,35 @@ class CastRequest
 
     public function withHeaders(CastHeader $headers): self
     {
-        $this->headers = $headers;
-        return $this;
+        $clone = clone $this;
+        $clone->headers = $headers;
+        return $clone;
     }
 
     public function withBody(mixed $body): self
     {
-        $this->body = $body;
-        return $this;
+        $clone = clone $this;
+        $clone->body = $body;
+        return $clone;
     }
 
     public function withJsonBody(array|object $data): self
     {
-        if ($this->headers === null) {
-            $this->headers = new CastHeader();
-        }
-        $this->headers->set('Content-Type', 'application/json');
-        $this->body = json_encode($data);
-        return $this;
+        $clone = clone $this;
+        $clone->headers = $clone->headers ? clone $clone->headers : new CastHeader();
+        $clone->headers->set('Content-Type', 'application/json');
+        $clone->body = json_encode($data);
+        return $clone;
     }
 
     public function withFormParams(array $data): self
     {
-        if ($this->headers === null) {
-            $this->headers = new CastHeader();
-        }
-        $this->headers->set('Content-Type', 'application/x-www-form-urlencoded');
-        $this->body = http_build_query($data);
-        $this->isMultipart = false;
-        return $this;
+        $clone = clone $this;
+        $clone->headers = $clone->headers ? clone $clone->headers : new CastHeader();
+        $clone->headers->set('Content-Type', 'application/x-www-form-urlencoded');
+        $clone->body = http_build_query($data);
+        $clone->isMultipart = false;
+        return $clone;
     }
 
     /**
@@ -220,33 +228,50 @@ class CastRequest
      * @param array $data Associative array of form fields.
      *                    To attach a file, use a CURLFile object as a value.
      *                    Example: ['field' => 'value', 'attachment' => new CURLFile('/path/to/file.jpg')]
-     * @return $this
+     * @return self
      */
     public function withMultipartBody(array $data): self
     {
-        $this->body = $data;
-        $this->isMultipart = true;
-        $this->headers?->remove('Content-Type');
-        return $this;
+        $clone = clone $this;
+        $clone->body = $data;
+        $clone->isMultipart = true;
+        if ($clone->headers) {
+            $clone->headers = clone $clone->headers;
+            $clone->headers->remove('Content-Type');
+        }
+        return $clone;
     }
 
     public function timeout(int $seconds): self
     {
-        $this->timeout = $seconds;
-        return $this;
+        $clone = clone $this;
+        $clone->timeout = $seconds;
+        return $clone;
     }
 
     public function connectTimeout(int $seconds): self
     {
-        $this->connectTimeout = $seconds;
-        return $this;
+        $clone = clone $this;
+        $clone->connectTimeout = $seconds;
+        return $clone;
     }
 
-    public function retry(int $count, int $delayMs = 500): self
+    /**
+     * Configure retry behavior for failed requests.
+     *
+     * @param int $count Number of retry attempts (minimum 1)
+     * @param int $delayMs Base delay between retries in milliseconds
+     * @param bool $exponentialBackoff When true, delay doubles with each attempt + random jitter.
+     *                                  Example with 500ms base: 500ms → 1000ms → 2000ms (±30% jitter)
+     * @return self
+     */
+    public function retry(int $count, int $delayMs = 500, bool $exponentialBackoff = true): self
     {
-        $this->retryCount = max(1, $count);
-        $this->retryDelay = max(0, $delayMs);
-        return $this;
+        $clone = clone $this;
+        $clone->retryCount = max(1, $count);
+        $clone->retryDelay = max(0, $delayMs);
+        $clone->exponentialBackoff = $exponentialBackoff;
+        return $clone;
     }
 
     /**
@@ -254,12 +279,13 @@ class CastRequest
      * Pass null to disable the limit (use with caution).
      *
      * @param int|null $bytes Maximum response size in bytes, or null to disable
-     * @return $this
+     * @return self
      */
     public function maxResponseSize(?int $bytes): self
     {
-        $this->maxResponseSize = $bytes !== null ? max(0, $bytes) : null;
-        return $this;
+        $clone = clone $this;
+        $clone->maxResponseSize = $bytes !== null ? max(0, $bytes) : null;
+        return $clone;
     }
 
     /**
@@ -267,12 +293,13 @@ class CastRequest
      * By default, errors are returned as CastResponse objects without throwing.
      *
      * @param bool $throw Whether to throw exceptions on HTTP errors
-     * @return $this
+     * @return self
      */
     public function throwOnError(bool $throw = true): self
     {
-        $this->throwOnError = $throw;
-        return $this;
+        $clone = clone $this;
+        $clone->throwOnError = $throw;
+        return $clone;
     }
 
     /**
@@ -280,30 +307,33 @@ class CastRequest
      *
      * @param string $key Query parameter name
      * @param mixed $value Query parameter value
-     * @return $this
+     * @return self
      */
     public function withQueryParam(string $key, mixed $value): self
     {
-        $this->queryParams[$key] = $value;
-        return $this;
+        $clone = clone $this;
+        $clone->queryParams[$key] = $value;
+        return $clone;
     }
 
     /**
      * Add multiple query parameters.
      *
      * @param array $params Associative array of query parameters
-     * @return $this
+     * @return self
      */
     public function withQueryParams(array $params): self
     {
-        $this->queryParams = array_merge($this->queryParams, $params);
-        return $this;
+        $clone = clone $this;
+        $clone->queryParams = array_merge($clone->queryParams, $params);
+        return $clone;
     }
 
     public function withOptions(array $options): self
     {
-        $this->options = array_replace($this->options, $options);
-        return $this;
+        $clone = clone $this;
+        $clone->options = array_replace($clone->options, $options);
+        return $clone;
     }
 
     // --- Getters for the Client ---
@@ -347,6 +377,11 @@ class CastRequest
     public function getRetryDelay(): int
     {
         return $this->retryDelay;
+    }
+
+    public function useExponentialBackoff(): bool
+    {
+        return $this->exponentialBackoff;
     }
 
     public function getMaxResponseSize(): ?int
