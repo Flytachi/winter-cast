@@ -8,13 +8,23 @@
             "Flytachi\\Winter\\Cast\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Flytachi\\Winter\\Cast\\Tests\\": "tests/"
+        }
+    },
     "require": {
         "php": ">=8.3",
         "flytachi/winter-base": "^1.0",
         "ext-curl": "*"
     },
     "require-dev": {
+        "phpunit/phpunit": "@stable",
         "squizlabs/php_codesniffer": "@stable"
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:coverage": "phpunit --coverage-html coverage"
     },
     "authors": [
         {

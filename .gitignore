@@ -9,5 +9,9 @@
 /.zed
 .DS_Store
 
+## PHPUnit
+.phpunit.cache
+/coverage
+
 /vendor
 composer.lock

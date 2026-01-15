@@ -85,6 +85,23 @@ use Random\RandomException;
  * $externalData = CastRequest::get('https://external-api/data')
  *     ->send($externalClient);
  * ```
+ *
+ * ---
+ * ### Example 4: Using middleware
+ *
+ * ```
+ * // Create client with middleware
+ * $client = new CastClient();
+ * $client
+ *     ->addMiddleware(new LoggingMiddleware($logger))
+ *     ->addMiddleware(new BearerAuthMiddleware($token));
+ *
+ * // Set as global client - all requests now go through middleware
+ * Cast::setGlobalClient($client);
+ *
+ * // Requests are automatically logged and authenticated
+ * $response = Cast::sendGet('https://api.com/users');
+ * ```
  * ---
  *
  * @package Flytachi\Winter\Cast\Common
@@ -92,11 +109,15 @@ use Random\RandomException;
  *
  * @see CastRequest
  * @see CastResponse
+ * @see CastMiddleware
  * @see Cast
  */
 class CastClient
 {
     private LoggerInterface $logger;
+
+    /** @var CastMiddleware[] */
+    private array $middleware = [];
 
     /**
      * @param int $defaultTimeout Default total timeout in seconds for requests.
@@ -108,17 +129,70 @@ class CastClient
         private readonly int $defaultConnectTimeout = 5,
         private readonly array $defaultOptions = []
     ) {
-        $this->logger = LoggerRegistry::instance('CastClient');
+        $this->logger = LoggerRegistry::instance(static::class);
     }
 
     /**
-     * Executes the given HTTP request.
+     * Adds a middleware to the client.
+     *
+     * Middleware is executed in the order it was added (FIFO).
+     * Each middleware can modify the request, response, or both.
+     *
+     * @param CastMiddleware $middleware The middleware to add
+     * @return self Returns $this for method chaining
+     */
+    public function addMiddleware(CastMiddleware $middleware): self
+    {
+        $this->middleware[] = $middleware;
+        return $this;
+    }
+
+    /**
+     * Returns all registered middleware.
+     *
+     * @return CastMiddleware[]
+     */
+    public function getMiddleware(): array
+    {
+        return $this->middleware;
+    }
+
+    /**
+     * Executes the given HTTP request through the middleware chain.
+     *
+     * If middleware is registered, the request passes through each middleware
+     * in order before being executed. Each middleware can modify the request,
+     * response, or both.
      *
      * @param CastRequest $request The request object to send.
      * @return CastResponse The response object.
      * @throws CastException If the request fails after all retry attempts.
      */
     public function send(CastRequest $request): CastResponse
+    {
+        if (empty($this->middleware)) {
+            return $this->executeRequest($request);
+        }
+
+        // Build middleware chain (last added = innermost)
+        $handler = fn(CastRequest $req): CastResponse => $this->executeRequest($req);
+
+        foreach (array_reverse($this->middleware) as $middleware) {
+            $next = $handler;
+            $handler = fn(CastRequest $req): CastResponse => $middleware->handle($req, $next);
+        }
+
+        return $handler($request);
+    }
+
+    /**
+     * Executes the HTTP request using cURL (core implementation).
+     *
+     * @param CastRequest $request The request object to send.
+     * @return CastResponse The response object.
+     * @throws CastException If the request fails after all retry attempts.
+     */
+    private function executeRequest(CastRequest $request): CastResponse
     {
         $this->logger->debug('Sending request', [
             'method' => $request->getMethod(),

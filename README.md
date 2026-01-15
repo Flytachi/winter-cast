@@ -7,14 +7,15 @@ A modern, fluent HTTP client for PHP 8.3+ with a focus on developer experience, 
 
 ## Features
 
-✨ **Fluent API** - Chainable methods for building requests  
-🎯 **Type-Safe** - Full PHP 8.3+ type declarations  
-🚀 **Zero Config** - Works out of the box with sensible defaults  
-🔄 **Auto-Retry** - Built-in retry logic for failed requests  
-⚡ **Fast** - Powered by cURL for maximum performance  
-🛡️ **Secure** - URL validation, response size limits, timeout controls  
-🎭 **Facade Pattern** - Simple static interface or DI-friendly client  
-📝 **PSR-3 Logging** - Automatic request/response logging  
+✨ **Fluent API** - Chainable, immutable request builder
+🎯 **Type-Safe** - Full PHP 8.3+ type declarations
+🚀 **Zero Config** - Works out of the box with sensible defaults
+🔄 **Auto-Retry** - Exponential backoff with jitter
+⚡ **Fast** - Powered by cURL for maximum performance
+🛡️ **Secure** - URL validation, response size limits, timeout controls
+🔌 **Middleware** - Intercept requests/responses (logging, auth, retry)
+🏗️ **ApiService** - Abstract base class for building API clients
+📝 **PSR-3 Logging** - Built-in LoggingMiddleware
 💥 **Smart Exceptions** - Specific exception types for different errors  
 
 ---
@@ -203,9 +204,21 @@ Cast::post($url)
 Cast::get($url)
     ->timeout(30)           // Total request timeout (seconds)
     ->connectTimeout(10)    // Connection timeout (seconds)
-    ->retry(3, 2000)        // 3 retries, 2 second delay
+    ->retry(3, 1000)        // 3 retries, 1s base delay, exponential backoff
+    ->send();
+
+// Disable exponential backoff (fixed delay)
+Cast::get($url)
+    ->retry(3, 1000, false) // 3 retries, fixed 1s delay
     ->send();
 ```
+
+**Exponential Backoff with Jitter:**
+- Retry 1: ~1000ms (1s × 2⁰ ± 30% jitter)
+- Retry 2: ~2000ms (1s × 2¹ ± 30% jitter)
+- Retry 3: ~4000ms (1s × 2² ± 30% jitter)
+
+Jitter prevents thundering herd problem when multiple clients retry simultaneously.
 
 ### Error Handling
 
@@ -287,6 +300,237 @@ Cast::setGlobalClient($client);
 
 ---
 
+## Middleware
+
+Middleware allows you to intercept and modify requests/responses. Use cases include logging, authentication, caching, and retry logic.
+
+### Creating Custom Middleware
+
+```php
+use Flytachi\Winter\Cast\Common\CastMiddleware;
+use Flytachi\Winter\Cast\Common\CastRequest;
+use Flytachi\Winter\Cast\Common\CastResponse;
+
+class TimingMiddleware implements CastMiddleware
+{
+    public function handle(CastRequest $request, callable $next): CastResponse
+    {
+        $start = microtime(true);
+
+        $response = $next($request);  // Pass to next middleware/client
+
+        $duration = microtime(true) - $start;
+        echo "Request took {$duration}s\n";
+
+        return $response;
+    }
+}
+```
+
+### Adding Middleware to Client
+
+```php
+use Flytachi\Winter\Cast\Common\CastClient;
+
+$client = new CastClient();
+$client
+    ->addMiddleware(new LoggingMiddleware($logger))
+    ->addMiddleware(new BearerAuthMiddleware($token))
+    ->addMiddleware(new TimingMiddleware());
+
+// Middleware executes in order: Logging → Auth → Timing → Request
+```
+
+### Using with Facade
+
+```php
+$client = new CastClient();
+$client->addMiddleware(new BearerAuthMiddleware($token));
+
+Cast::setGlobalClient($client);
+
+// All requests now use middleware
+Cast::sendGet('https://api.com/data');
+```
+
+---
+
+## Built-in Middleware
+
+Ready-to-use middleware classes in `Flytachi\Winter\Cast\Stereotype`:
+
+### LoggingMiddleware
+
+Logs all HTTP requests and responses with PSR-3 logger:
+
+```php
+use Flytachi\Winter\Cast\Stereotype\LoggingMiddleware;
+
+$client->addMiddleware(new LoggingMiddleware(
+    logger: $psrLogger,
+    requestLevel: LogLevel::INFO,     // Log level for requests
+    responseLevel: LogLevel::INFO,    // Log level for 2xx/3xx
+    errorLevel: LogLevel::WARNING,    // Log level for 4xx/5xx
+    logBody: false,                   // Log request/response body
+    bodyMaxLength: 500                // Truncate body at N chars
+));
+
+// Output:
+// [INFO] HTTP Request: GET https://api.com/users
+// [INFO] HTTP Response: 200 (125.4ms)
+```
+
+### BearerAuthMiddleware
+
+Automatically adds Bearer token to all requests:
+
+```php
+use Flytachi\Winter\Cast\Stereotype\BearerAuthMiddleware;
+
+// Static token
+$client->addMiddleware(new BearerAuthMiddleware('your-api-token'));
+
+// Dynamic token (fetched for each request)
+$client->addMiddleware(new BearerAuthMiddleware(
+    fn() => $tokenService->getAccessToken()
+));
+```
+
+### BasicAuthMiddleware
+
+Adds HTTP Basic authentication:
+
+```php
+use Flytachi\Winter\Cast\Stereotype\BasicAuthMiddleware;
+
+$client->addMiddleware(new BasicAuthMiddleware('username', 'password'));
+```
+
+### HeadersMiddleware
+
+Adds custom headers to all requests:
+
+```php
+use Flytachi\Winter\Cast\Stereotype\HeadersMiddleware;
+
+$client->addMiddleware(new HeadersMiddleware(
+    CastHeader::instance()
+        ->userAgent('MyApp/1.0')
+        ->acceptLanguage('ru')
+        ->set('X-API-Version', '2')
+));
+```
+
+### RetryOnUnauthorizedMiddleware
+
+Automatically refreshes token on 401 and retries:
+
+```php
+use Flytachi\Winter\Cast\Stereotype\RetryOnUnauthorizedMiddleware;
+
+$client->addMiddleware(new RetryOnUnauthorizedMiddleware(
+    tokenRefresher: function (): string {
+        // Refresh your token
+        $response = Cast::sendPost('https://auth.api.com/refresh', [
+            'refresh_token' => $storedRefreshToken
+        ]);
+        return $response->json()['access_token'];
+    },
+    maxRetries: 1  // Retry once after refresh
+));
+```
+
+---
+
+## ApiService (Abstract Base Class)
+
+Build clean API clients by extending `ApiService`. Each service has its own isolated `CastClient`.
+
+### Basic Usage
+
+```php
+use Flytachi\Winter\Cast\Stereotype\ApiService;
+use Flytachi\Winter\Cast\Common\CastHeader;
+
+class PaymentApi extends ApiService
+{
+    protected static function baseUrl(): string
+    {
+        return 'https://api.payment.com/v1';
+    }
+
+    protected static function headers(): CastHeader
+    {
+        return CastHeader::instance()
+            ->authBearer(env('PAYMENT_TOKEN'))
+            ->json();
+    }
+
+    public static function getBalance(): array
+    {
+        $response = self::get('balance')->send(self::client());
+        return self::tryResult($response);
+    }
+
+    public static function createPayment(array $data): array
+    {
+        $response = self::post('payments')
+            ->withJsonBody($data)
+            ->send(self::client());
+        return self::tryResult($response);
+    }
+}
+
+// Usage
+$balance = PaymentApi::getBalance();
+$payment = PaymentApi::createPayment(['amount' => 100]);
+```
+
+### With Custom Client & Middleware
+
+```php
+class PaymentApi extends ApiService
+{
+    protected static function baseUrl(): string
+    {
+        return env('PAYMENT_API_URL');
+    }
+
+    protected static function headers(): CastHeader
+    {
+        return CastHeader::instance()->json();
+    }
+
+    protected static function createClient(): CastClient
+    {
+        return (new CastClient(defaultTimeout: 30))
+            ->addMiddleware(new LoggingMiddleware($logger))
+            ->addMiddleware(new BearerAuthMiddleware(
+                fn() => TokenService::getToken()
+            ))
+            ->addMiddleware(new RetryOnUnauthorizedMiddleware(
+                fn() => TokenService::refresh()
+            ));
+    }
+}
+```
+
+### Available Methods
+
+| Method | Description |
+|--------|-------------|
+| `get(string $path)` | Create GET request |
+| `post(string $path)` | Create POST request |
+| `put(string $path)` | Create PUT request |
+| `patch(string $path)` | Create PATCH request |
+| `delete(string $path)` | Create DELETE request |
+| `head(string $path)` | Create HEAD request |
+| `client()` | Get service's CastClient |
+| `setClient(CastClient)` | Replace service's client |
+| `tryResult(CastResponse)` | Extract data or throw exception |
+
+---
+
 ## Security Features
 
 ### URL Validation
@@ -320,25 +564,6 @@ Cast::get($url)
 Cast::get($url)
     ->maxResponseSize(null)
     ->send();
-```
-
----
-
-## Logging
-
-Automatic PSR-3 logging via `LoggerRegistry`:
-
-**Logged events:**
-- Request start (DEBUG)
-- Request completion (DEBUG)
-- Request failures (DEBUG)
-- Retry attempts (DEBUG)
-- HTTP errors (DEBUG)
-
-**Example log output:**
-```
-[DEBUG] Sending request {"method":"GET","url":"https://api.com/users","timeout":10}
-[DEBUG] Completed request {"method":"GET","url":"https://api.com/users","status":200,"duration":0.234}
 ```
 
 ---
