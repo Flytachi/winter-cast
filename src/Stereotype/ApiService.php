@@ -278,7 +278,7 @@ abstract class ApiService
     }
 
     /**
-     * Extracts error message from response body.
+     * Extracts an error message from the response body.
      *
      * Override to customize error message extraction for specific APIs.
      *
