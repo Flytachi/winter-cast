@@ -7,15 +7,15 @@ A modern, fluent HTTP client for PHP 8.3+ with a focus on developer experience, 
 
 ## Features
 
-✨ **Fluent API** - Chainable, immutable request builder
-🎯 **Type-Safe** - Full PHP 8.3+ type declarations
-🚀 **Zero Config** - Works out of the box with sensible defaults
-🔄 **Auto-Retry** - Exponential backoff with jitter
-⚡ **Fast** - Powered by cURL for maximum performance
-🛡️ **Secure** - URL validation, response size limits, timeout controls
-🔌 **Middleware** - Intercept requests/responses (logging, auth, retry)
-🏗️ **ApiService** - Abstract base class for building API clients
-📝 **PSR-3 Logging** - Built-in LoggingMiddleware
+✨ **Fluent API** - Chainable, immutable request builder<br>
+🎯 **Type-Safe** - Full PHP 8.3+ type declarations<br>
+🚀 **Zero Config** - Works out of the box with sensible defaults<br>
+🔄 **Auto-Retry** - Exponential backoff with jitter<br>
+⚡ **Fast** - Powered by cURL for maximum performance<br>
+🛡️ **Secure** - URL validation, response size limits, timeout controls<br>
+🔌 **Middleware** - Intercept requests/responses (logging, auth, retry)<br>
+🏗️ **ApiService** - Abstract base class for building API clients<br>
+📝 **PSR-3 Logging** - Built-in LoggingMiddleware<br>
 💥 **Smart Exceptions** - Specific exception types for different errors  
 
 ---
