@@ -71,6 +71,11 @@ class CastHeader
         return $this;
     }
 
+    public function auth(string $token): self
+    {
+        return $this->set('Authorization', $token);
+    }
+
     public function authBearer(string $token): self
     {
         return $this->set('Authorization', 'Bearer ' . $token);
