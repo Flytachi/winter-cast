@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Flytachi\Winter\Cast\Common;
 
 use CurlHandle;
-use Flytachi\Winter\Base\Log\LoggerRegistry;
 use Flytachi\Winter\Cast\Exception\CastException;
 use Flytachi\Winter\Cast\Exception\ConnectionException;
 use Flytachi\Winter\Cast\Exception\RequestException;
@@ -114,8 +113,6 @@ use Random\RandomException;
  */
 class CastClient
 {
-    private LoggerInterface $logger;
-
     /** @var CastMiddleware[] */
     private array $middleware = [];
 
@@ -129,7 +126,6 @@ class CastClient
         private readonly int $defaultConnectTimeout = 5,
         private readonly array $defaultOptions = []
     ) {
-        $this->logger = LoggerRegistry::instance(static::class);
     }
 
     /**
@@ -194,11 +190,6 @@ class CastClient
      */
     private function executeRequest(CastRequest $request): CastResponse
     {
-        $this->logger->debug('Sending request', [
-            'method' => $request->getMethod(),
-            'url' => $request->getUrl(),
-            'timeout' => $request->getTimeout(),
-        ]);
         $curlHandle = $this->initializeCurl($request);
         $lastException = null;
 
@@ -233,13 +224,6 @@ class CastClient
                     $curlErrno = curl_errno($curlHandle);
                     $curlError = curl_error($curlHandle);
 
-                    $this->logger->critical('Failed request', [
-                        'method' => $request->getMethod(),
-                        'url' => $request->getUrl(),
-                        'curl_errno' => $curlErrno,
-                        'curl_error' => $curlError,
-                    ]);
-
                     throw match (true) {
                         // Timeout
                         in_array($curlErrno, [CURLE_OPERATION_TIMEDOUT, CURLE_OPERATION_TIMEOUTED], true)
@@ -265,15 +249,6 @@ class CastClient
                 if ($attempts > 0) {
                     $attemptNumber = $request->getRetryCount() - $attempts - 1;
                     $delay = $this->calculateRetryDelay($request, $attemptNumber);
-
-                    $this->logger->debug('Failed request, retrying', [
-                        'method' => $request->getMethod(),
-                        'url' => $request->getUrl(),
-                        'error' => $e->getMessage(),
-                        'attempts_left' => $attempts,
-                        'retry_delay_ms' => $delay,
-                        'exponential_backoff' => $request->useExponentialBackoff(),
-                    ]);
                     usleep($delay * 1000);
                     continue;
                 }
@@ -291,20 +266,8 @@ class CastClient
             headers: $headerData ?? [],
             info: $info
         );
-        $this->logger->debug('Completed request', [
-            'method' => $request->getMethod(),
-            'url' => $request->getUrl(),
-            'status' => $response->statusCode,
-            'duration' => $info['total_time'] ?? 0,
-        ]);
 
         if ($request->shouldThrowOnError() && !$response->isSuccess()) {
-            $this->logger->critical('Request returned error status', [
-                'method' => $request->getMethod(),
-                'url' => $request->getUrl(),
-                'status' => $response->statusCode,
-                'body_preview' => substr($response->body() ?? '', 0, 200),
-            ]);
             $message = "HTTP Error {$response->statusCode}: " . ($response->body() ?? 'No response body');
             throw new RequestException($response, $message);
         }
