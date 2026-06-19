@@ -254,7 +254,7 @@ abstract class ApiService
         }
 
         // Return specific key if exists, otherwise return full body
-        if ($dataKey === null && is_array($body)) {
+        if ($dataKey !== null && is_array($body)) {
             return $body[$dataKey] ?? null;
         }
 
