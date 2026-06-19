@@ -76,8 +76,10 @@ class CastClientTest extends TestCase
         $client = new CastClient();
         $order = [];
 
-        $middleware1 = new class($order) implements CastMiddleware {
-            public function __construct(private array &$order) {}
+        $middleware1 = new class ($order) implements CastMiddleware {
+            public function __construct(private array &$order)
+            {
+            }
 
             public function handle(CastRequest $request, callable $next): CastResponse
             {
@@ -88,8 +90,10 @@ class CastClientTest extends TestCase
             }
         };
 
-        $middleware2 = new class($order) implements CastMiddleware {
-            public function __construct(private array &$order) {}
+        $middleware2 = new class ($order) implements CastMiddleware {
+            public function __construct(private array &$order)
+            {
+            }
 
             public function handle(CastRequest $request, callable $next): CastResponse
             {

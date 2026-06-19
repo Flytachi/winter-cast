@@ -23,8 +23,8 @@
         "squizlabs/php_codesniffer": "@stable"
     },
     "scripts": {
-        "test": "phpunit",
-        "test:coverage": "phpunit --coverage-html coverage"
+        "test": "vendor/bin/phpunit",
+        "test-detail": "vendor/bin/phpunit --testdox"
     },
     "authors": [
         {

@@ -98,7 +98,9 @@ abstract class ApiService
     /**
      * Private constructor to enforce static-only usage.
      */
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     // =========================================================================
     // Client Management

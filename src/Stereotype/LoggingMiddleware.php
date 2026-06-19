@@ -51,7 +51,8 @@ class LoggingMiddleware implements CastMiddleware
         private readonly string $errorLevel = LogLevel::WARNING,
         private readonly bool $logBody = false,
         private readonly int $bodyMaxLength = 500
-    ) {}
+    ) {
+    }
 
     public function handle(CastRequest $request, callable $next): CastResponse
     {

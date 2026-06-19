@@ -37,7 +37,8 @@ class BasicAuthMiddleware implements CastMiddleware
     public function __construct(
         private readonly string $username,
         private readonly string $password
-    ) {}
+    ) {
+    }
 
     public function handle(CastRequest $request, callable $next): CastResponse
     {
