@@ -238,11 +238,11 @@ abstract class ApiService
      * Override this method to customize response parsing for specific APIs.
      *
      * @param CastResponse $response The HTTP response
-     * @param string $dataKey The key to extract from JSON response (default: 'data')
+     * @param string|null $dataKey The key to extract from JSON response (default: 'data')
      * @return mixed The extracted data
      * @throws RequestException If the response indicates an error
      */
-    protected static function tryResult(CastResponse $response, string $dataKey = 'data'): mixed
+    protected static function tryResult(CastResponse $response, ?string $dataKey = null): mixed
     {
         $body = $response->json();
 
@@ -252,8 +252,8 @@ abstract class ApiService
         }
 
         // Return specific key if exists, otherwise return full body
-        if ($body !== null && array_key_exists($dataKey, $body)) {
-            return $body[$dataKey];
+        if ($dataKey === null && is_array($body)) {
+            return $body[$dataKey] ?? null;
         }
 
         return $body;
