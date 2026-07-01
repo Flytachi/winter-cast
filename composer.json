@@ -3,6 +3,12 @@
     "description": "Winter framework cast component",
     "type": "library",
     "license": "MIT",
+    "scripts": {
+        "test": "phpunit",
+        "test-detail": "phpunit --testdox",
+        "cs-check": "phpcs .",
+        "cs-fix": "phpcbf ."
+    },
     "autoload": {
         "psr-4": {
             "Flytachi\\Winter\\Cast\\": "src/"
@@ -22,14 +28,16 @@
         "phpunit/phpunit": "@stable",
         "squizlabs/php_codesniffer": "@stable"
     },
-    "scripts": {
-        "test": "vendor/bin/phpunit",
-        "test-detail": "vendor/bin/phpunit --testdox"
+    "homepage": "https://winterframe.net",
+    "support": {
+        "issues": "https://github.com/flytachi/winter-cast/issues",
+        "source": "https://github.com/flytachi/winter-cast",
+        "docs": "https://winterframe.net/packages/cast"
     },
     "authors": [
         {
             "name": "Flytachi",
-            "email": "jasur.rakhmatov03@gmail.com"
+            "email": "jason.khan.x@gmail.com"
         }
     ]
 }

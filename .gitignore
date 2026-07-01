@@ -8,10 +8,8 @@
 /.nova
 /.zed
 .DS_Store
-
-## PHPUnit
-.phpunit.cache
-/coverage
+/phpcs.xml.dist
+.phpunit.result.cache
 
 /vendor
 composer.lock
