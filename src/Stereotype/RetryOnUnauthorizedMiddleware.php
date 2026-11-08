@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Flytachi\Winter\Cast\Stereotype;
 
-use Flytachi\Winter\Cast\Common\CastHeader;
 use Flytachi\Winter\Cast\Common\CastMiddleware;
 use Flytachi\Winter\Cast\Common\CastRequest;
 use Flytachi\Winter\Cast\Common\CastResponse;
@@ -82,9 +81,8 @@ class RetryOnUnauthorizedMiddleware implements CastMiddleware
                 return $response;
             }
 
-            $retryRequest = $request->withHeaders(
-                CastHeader::instance()->authBearer($newToken)
-            );
+            // Only Authorization is replaced; the request's other headers are kept.
+            $retryRequest = $request->withHeader('Authorization', 'Bearer ' . $newToken);
 
             $response = $next($retryRequest);
         }

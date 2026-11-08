@@ -9,6 +9,7 @@
 /.zed
 .DS_Store
 /phpcs.xml.dist
+/.phpunit.cache
 .phpunit.result.cache
 
 /vendor

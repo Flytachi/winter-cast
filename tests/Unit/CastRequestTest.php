@@ -359,4 +359,112 @@ class CastRequestTest extends TestCase
         $this->assertNull($request->getConnectTimeout());
         $this->assertNull($request->getBody());
     }
+
+    // =========================================================================
+    // Headers: merge, single header, replace, isolation (1.4.0)
+    // =========================================================================
+
+    public function testWithHeadersMerges(): void
+    {
+        $request = CastRequest::get('https://example.com')
+            ->withHeaders(CastHeader::instance()->json()->userAgent('App/1.0'))
+            ->withHeaders(CastHeader::instance()->set('X-Request-ID', '42'));
+
+        $this->assertSame(
+            ['Accept' => 'application/json', 'Content-Type' => 'application/json', 'User-Agent' => 'App/1.0', 'X-Request-ID' => '42'],
+            $request->getHeaders()->all(),
+        );
+    }
+
+    public function testWithHeadersAcceptsArrayAndOverridesSameName(): void
+    {
+        $request = CastRequest::get('https://example.com')
+            ->withHeaders(['Accept' => 'application/json', 'X-A' => '1'])
+            ->withHeaders(['accept' => 'text/csv']);
+
+        $this->assertSame(['accept' => 'text/csv', 'X-A' => '1'], $request->getHeaders()->all());
+    }
+
+    public function testWithHeaderKeepsOthers(): void
+    {
+        $request = CastRequest::get('https://example.com')
+            ->withHeaders(CastHeader::instance()->json())
+            ->withHeader('Authorization', 'Bearer t');
+
+        $headers = $request->getHeaders();
+        $this->assertSame('Bearer t', $headers->get('Authorization'));
+        $this->assertSame('application/json', $headers->get('Accept'));
+        $this->assertSame('application/json', $headers->get('Content-Type'));
+    }
+
+    public function testWithoutHeader(): void
+    {
+        $request = CastRequest::get('https://example.com')
+            ->withHeaders(CastHeader::instance()->json())
+            ->withoutHeader('accept');
+
+        $this->assertSame(['Content-Type' => 'application/json'], $request->getHeaders()->all());
+    }
+
+    public function testReplaceHeadersDropsEverythingBefore(): void
+    {
+        $request = CastRequest::get('https://example.com')
+            ->withHeaders(CastHeader::instance()->json())
+            ->replaceHeaders(['X-Only' => '1']);
+
+        $this->assertSame(['X-Only' => '1'], $request->getHeaders()->all());
+    }
+
+    public function testHeadersMethodsDoNotChangeTheOriginal(): void
+    {
+        $original = CastRequest::get('https://example.com')->withHeader('X-A', '1');
+
+        $original->withHeader('X-B', '2');
+        $original->withoutHeader('X-A');
+        $original->withHeaders(['X-C' => '3']);
+        $original->replaceHeaders(['X-D' => '4']);
+
+        $this->assertSame(['X-A' => '1'], $original->getHeaders()->all());
+    }
+
+    public function testChangingGivenHeadersAfterwardsDoesNotChangeRequest(): void
+    {
+        $headers = CastHeader::instance()->set('X-A', '1');
+        $request = CastRequest::get('https://example.com')->withHeaders($headers);
+
+        $headers->set('X-A', 'changed')->set('X-B', '2');
+
+        $this->assertSame(['X-A' => '1'], $request->getHeaders()->all());
+    }
+
+    public function testChangingReturnedHeadersDoesNotChangeRequest(): void
+    {
+        $request = CastRequest::get('https://example.com')->withHeader('X-A', '1');
+
+        $request->getHeaders()->set('X-A', 'changed');
+
+        $this->assertSame('1', $request->getHeaders()->get('X-A'));
+    }
+
+    public function testJsonBodyKeepsOtherHeaders(): void
+    {
+        $request = CastRequest::post('https://example.com')
+            ->withHeaders(['Accept' => 'application/json', 'User-Agent' => 'App/1.0'])
+            ->withJsonBody(['a' => 1]);
+
+        $this->assertSame(
+            ['Accept' => 'application/json', 'User-Agent' => 'App/1.0', 'Content-Type' => 'application/json'],
+            $request->getHeaders()->all(),
+        );
+    }
+
+    public function testMultipartRemovesContentTypeInAnyCase(): void
+    {
+        $request = CastRequest::post('https://example.com')
+            ->withHeaders(['content-type' => 'application/json', 'Accept' => 'application/json'])
+            ->withMultipartBody(['field' => 'value']);
+
+        $this->assertFalse($request->getHeaders()->has('Content-Type'));
+        $this->assertSame('application/json', $request->getHeaders()->get('Accept'));
+    }
 }

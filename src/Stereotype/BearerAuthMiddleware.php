@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Flytachi\Winter\Cast\Stereotype;
 
-use Flytachi\Winter\Cast\Common\CastHeader;
 use Flytachi\Winter\Cast\Common\CastMiddleware;
 use Flytachi\Winter\Cast\Common\CastRequest;
 use Flytachi\Winter\Cast\Common\CastResponse;
@@ -60,8 +59,7 @@ class BearerAuthMiddleware implements CastMiddleware
             ? ($this->tokenProvider)()
             : $this->tokenProvider;
 
-        $headers = CastHeader::instance()->authBearer($token);
-
-        return $next($request->withHeaders($headers));
+        // Only Authorization is set; the request's other headers are kept.
+        return $next($request->withHeader('Authorization', 'Bearer ' . $token));
     }
 }

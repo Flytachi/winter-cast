@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Flytachi\Winter\Cast\Common;
 
+use Composer\InstalledVersions;
 use CurlHandle;
 use Flytachi\Winter\Cast\Exception\CastException;
 use Flytachi\Winter\Cast\Exception\ConnectionException;
@@ -86,7 +87,21 @@ use Random\RandomException;
  * ```
  *
  * ---
- * ### Example 4: Using middleware
+ * ### Example 4: Default headers
+ *
+ * ```
+ * // Sent with every request; a request's own headers win over them, name by name
+ * $client = new CastClient(defaultHeaders: CastHeader::instance()
+ *     ->json()
+ *     ->userAgent('MyApp/1.0'));               // → MyApp/1.0 WinterCast/x.y.z curl/x.y.z
+ *
+ * CastRequest::get('https://api.com/users')
+ *     ->withHeader('X-Request-ID', $id)        // Accept, Content-Type, User-Agent stay
+ *     ->send($client);
+ * ```
+ *
+ * ---
+ * ### Example 5: Using middleware
  *
  * ```
  * // Create client with middleware
@@ -113,19 +128,36 @@ use Random\RandomException;
  */
 class CastClient
 {
+    private const string PACKAGE = 'flytachi/winter-cast';
+
     /** @var CastMiddleware[] */
     private array $middleware = [];
+
+    private readonly CastHeader $defaultHeaders;
+
+    /** `WinterCast/{version} curl/{version}`, built once per process. */
+    private static ?string $userAgentSuffix = null;
 
     /**
      * @param int $defaultTimeout Default total timeout in seconds for requests.
      * @param int $defaultConnectTimeout Default connection timeout in seconds.
      * @param array $defaultOptions Default cURL options to apply to all requests.
+     * @param CastHeader|array<string, string> $defaultHeaders Headers sent with every request.
+     *        A request's own headers (and what middleware sets) win over them, name by name.
      */
     public function __construct(
         private readonly int $defaultTimeout = 10,
         private readonly int $defaultConnectTimeout = 5,
-        private readonly array $defaultOptions = []
+        private readonly array $defaultOptions = [],
+        CastHeader|array $defaultHeaders = [],
     ) {
+        $this->defaultHeaders = (new CastHeader())->merge($defaultHeaders);
+    }
+
+    /** A copy of the headers sent with every request. */
+    public function getDefaultHeaders(): CastHeader
+    {
+        return clone $this->defaultHeaders;
     }
 
     /**
@@ -291,7 +323,7 @@ class CastClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => $request->getConnectTimeout() ?? $this->defaultConnectTimeout,
             CURLOPT_TIMEOUT => $request->getTimeout() ?? $this->defaultTimeout,
-            CURLOPT_HTTPHEADER => $request->getHeaders()->toArray(),
+            CURLOPT_HTTPHEADER => $this->headersFor($request)->toArray(),
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 10,
             CURLOPT_ENCODING => '',
@@ -324,6 +356,43 @@ class CastClient
      * @param int $attemptNumber Zero-based attempt number (0 = first retry)
      * @return int Delay in milliseconds
      */
+    /**
+     * The headers that go out: the client's defaults, then the request's own on top
+     * (name by name), then the User-Agent with the WinterCast/curl suffix.
+     */
+    private function headersFor(CastRequest $request): CastHeader
+    {
+        $headers = (clone $this->defaultHeaders)->merge($request->getHeaders());
+
+        $agent = $headers->get('User-Agent');
+        if ($agent === null || trim($agent) === '') {
+            $headers->set('User-Agent', self::userAgentSuffix());
+        } elseif (!$headers->isUserAgentExact() && !str_contains($agent, 'WinterCast/')) {
+            $headers->set('User-Agent', $agent . ' ' . self::userAgentSuffix());
+        }
+
+        return $headers;
+    }
+
+    /**
+     * `WinterCast/{version} curl/{version}` — the version of this package from Composer
+     * (`dev` when Composer does not know it) and of the cURL library PHP runs on.
+     */
+    private static function userAgentSuffix(): string
+    {
+        if (self::$userAgentSuffix !== null) {
+            return self::$userAgentSuffix;
+        }
+
+        $version = 'dev';
+        if (class_exists(InstalledVersions::class) && InstalledVersions::isInstalled(self::PACKAGE)) {
+            $version = InstalledVersions::getPrettyVersion(self::PACKAGE) ?? 'dev';
+        }
+        $curl = curl_version()['version'] ?? 'unknown';
+
+        return self::$userAgentSuffix = "WinterCast/{$version} curl/{$curl}";
+    }
+
     private function calculateRetryDelay(CastRequest $request, int $attemptNumber): int
     {
         $baseDelay = $request->getRetryDelay();

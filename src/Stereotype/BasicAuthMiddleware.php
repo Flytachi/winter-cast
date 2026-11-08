@@ -42,8 +42,9 @@ class BasicAuthMiddleware implements CastMiddleware
 
     public function handle(CastRequest $request, callable $next): CastResponse
     {
-        $headers = CastHeader::instance()->authBasic($this->username, $this->password);
+        // Only Authorization is set; the request's other headers are kept.
+        $authorization = CastHeader::instance()->authBasic($this->username, $this->password)->get('Authorization');
 
-        return $next($request->withHeaders($headers));
+        return $next($request->withHeader('Authorization', (string) $authorization));
     }
 }

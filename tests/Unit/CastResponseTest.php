@@ -63,6 +63,23 @@ class CastResponseTest extends TestCase
         $this->assertNull($response->json());
     }
 
+    public function testJsonScalarIsNull(): void
+    {
+        // Valid JSON, but not an object or an array: json() promises ?array.
+        foreach (['123', '"text"', 'true', 'null', '1.5'] as $body) {
+            $response = new CastResponse(200, $body, [], []);
+
+            $this->assertNull($response->json(), "body: {$body}");
+        }
+    }
+
+    public function testJsonList(): void
+    {
+        $response = new CastResponse(200, '[1,2,3]', [], []);
+
+        $this->assertSame([1, 2, 3], $response->json());
+    }
+
     public function testHeaders(): void
     {
         $headers = [

@@ -129,9 +129,62 @@ $headers = CastHeader::instance()
 - `authBearer($token)` - Bearer authentication
 - `authBasic($user, $pass)` - Basic authentication
 - `acceptLanguage($lang)` - Accept-Language header
-- `userAgent($agent)` - User-Agent header
+- `userAgent($agent, exact: false)` - User-Agent header (see [User-Agent](#user-agent))
 - `referer($url)` - Referer header
 - `contentType($type)` - Content-Type header
+
+**Reading and building:** `CastHeader::from(['X-Api-Key' => 'k'])`, `has($name)`, `get($name)`,
+`all()`, `remove($name)`, `merge($other)`.
+
+Header names are **case-insensitive**, as in HTTP: `set('content-type', …)` replaces a
+`Content-Type` set before, and `has()` / `get()` / `remove()` find it in any case. A name or a
+value containing a line break or NUL is rejected with `CastException` — so a value taken from
+user input cannot inject headers of its own.
+
+### Working with headers
+
+`withHeaders()` **adds** to what the request already has; a header of the same name is
+replaced, the others stay:
+
+```php
+$request = CastRequest::post('https://api.com/orders')
+    ->withHeaders(CastHeader::instance()->json()->userAgent('MyApp/1.0'))
+    ->withHeaders(['X-Request-ID' => $id])        // Accept, Content-Type, User-Agent stay
+    ->withHeader('Authorization', "Bearer {$t}")  // one header, the rest stay
+    ->withoutHeader('Accept');                    // drop one
+
+$request->replaceHeaders($headers);               // drop everything set before, take these
+```
+
+A request keeps its own copy of the headers: changing a `CastHeader` after passing it, or the
+one `getHeaders()` returns, does not change the request.
+
+**Default headers** live on the client and go out with every request; a request's own headers
+(and what middleware sets) win over them, name by name:
+
+```php
+$client = new CastClient(defaultHeaders: CastHeader::instance()
+    ->json()
+    ->userAgent('MyApp/1.0'));
+
+CastRequest::get('https://api.com/users')
+    ->withHeader('Accept', 'text/csv')   // wins over the default Accept
+    ->send($client);                     // Content-Type and User-Agent come from the client
+```
+
+### User-Agent
+
+Every request identifies itself as `WinterCast/{version} curl/{version}`. A User-Agent of your
+own goes first and the library's tokens follow, as RFC 9110 orders them — most significant
+first:
+
+```php
+CastHeader::instance()->userAgent('MyApp/1.0');               // MyApp/1.0 WinterCast/1.4.0 curl/8.11.0
+CastHeader::instance()->userAgent('MyApp/1.0', exact: true);  // MyApp/1.0
+```
+
+The suffix is added when the request is sent, so it also applies to a User-Agent set by a
+client default or by middleware, and it is never added twice.
 
 ### 4. CastResponse (Response Object)
 
@@ -291,7 +344,8 @@ $client = new CastClient(
     defaultOptions: [
         CURLOPT_SSL_VERIFYPEER => false,  // Disable SSL verification (dev only!)
         CURLOPT_FOLLOWLOCATION => true,
-    ]
+    ],
+    defaultHeaders: ['Accept' => 'application/json'],  // sent with every request
 );
 
 // Use custom client
@@ -357,7 +411,9 @@ Cast::sendGet('https://api.com/data');
 
 ## Built-in Middleware
 
-Ready-to-use middleware classes in `Flytachi\Winter\Cast\Stereotype`:
+Ready-to-use middleware classes in `Flytachi\Winter\Cast\Stereotype`. They **add** to a
+request's headers and never drop the ones it already has (before 1.4.0 the auth and header
+middlewares replaced every header of the request).
 
 ### LoggingMiddleware
 
@@ -382,7 +438,8 @@ $client->addMiddleware(new LoggingMiddleware(
 
 ### BearerAuthMiddleware
 
-Automatically adds Bearer token to all requests:
+Automatically adds Bearer token to all requests — only `Authorization` is set, the request's
+other headers stay:
 
 ```php
 use Flytachi\Winter\Cast\Stereotype\BearerAuthMiddleware;
@@ -398,7 +455,7 @@ $client->addMiddleware(new BearerAuthMiddleware(
 
 ### BasicAuthMiddleware
 
-Adds HTTP Basic authentication:
+Adds HTTP Basic authentication — only `Authorization` is set:
 
 ```php
 use Flytachi\Winter\Cast\Stereotype\BasicAuthMiddleware;
@@ -408,7 +465,9 @@ $client->addMiddleware(new BasicAuthMiddleware('username', 'password'));
 
 ### HeadersMiddleware
 
-Adds custom headers to all requests:
+Adds custom headers to all requests, on top of the request's own: a header of the same name is
+replaced, the others stay. For headers a request may override, use the client's
+[default headers](#working-with-headers) instead:
 
 ```php
 use Flytachi\Winter\Cast\Stereotype\HeadersMiddleware;
@@ -423,7 +482,8 @@ $client->addMiddleware(new HeadersMiddleware(
 
 ### RetryOnUnauthorizedMiddleware
 
-Automatically refreshes token on 401 and retries:
+Automatically refreshes token on 401 and retries — the retry keeps every header of the original
+request, only `Authorization` is replaced:
 
 ```php
 use Flytachi\Winter\Cast\Stereotype\RetryOnUnauthorizedMiddleware;

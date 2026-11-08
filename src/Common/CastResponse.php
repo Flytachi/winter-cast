@@ -130,7 +130,8 @@ readonly class CastResponse
     /**
      * Attempts to decode the JSON response body into an associative array.
      *
-     * @return array|null Returns null if the body is empty or not valid JSON.
+     * @return array|null Returns null if the body is empty, not valid JSON, or valid JSON
+     *                    that is not an object or an array (a bare `123`, `"text"`, `true`, `null`).
      */
     public function json(): ?array
     {
@@ -142,7 +143,9 @@ readonly class CastResponse
             return null;
         }
 
-        return json_decode($this->body, true);
+        $data = json_decode($this->body, true);
+
+        return is_array($data) ? $data : null;
     }
 
     /**

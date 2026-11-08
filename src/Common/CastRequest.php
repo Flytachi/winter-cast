@@ -188,10 +188,58 @@ class CastRequest
 
     // --- Configuration Methods ---
 
-    public function withHeaders(CastHeader $headers): self
+    /**
+     * Adds headers to the request: each given header replaces one of the same name (in any
+     * letter case), headers not given are kept.
+     *
+     * ```
+     * $request = CastRequest::post($url)
+     *     ->withHeaders(CastHeader::instance()->json()->userAgent('MyApp/1.0'))
+     *     ->withHeaders(['X-Request-ID' => $id]);   // Accept, Content-Type, User-Agent stay
+     * ```
+     *
+     * The request keeps its own copy: changing `$headers` afterwards does not change it.
+     * To drop every header set before, use {@see replaceHeaders()}.
+     *
+     * @param CastHeader|array<string, string> $headers
+     */
+    public function withHeaders(CastHeader|array $headers): self
     {
         $clone = clone $this;
-        $clone->headers = $headers;
+        $clone->headers = ($this->headers ? clone $this->headers : new CastHeader())->merge($headers);
+        return $clone;
+    }
+
+    /**
+     * Sets one header, replacing one of the same name (in any letter case); the others are kept.
+     */
+    public function withHeader(string $name, string $value): self
+    {
+        $clone = clone $this;
+        $clone->headers = ($this->headers ? clone $this->headers : new CastHeader())->set($name, $value);
+        return $clone;
+    }
+
+    /**
+     * Removes one header (in any letter case); the others are kept.
+     */
+    public function withoutHeader(string $name): self
+    {
+        $clone = clone $this;
+        $clone->headers = ($this->headers ? clone $this->headers : new CastHeader())->remove($name);
+        return $clone;
+    }
+
+    /**
+     * Replaces every header of the request with `$headers` — what `withHeaders()` did before
+     * 1.4.0. The request keeps its own copy.
+     *
+     * @param CastHeader|array<string, string> $headers
+     */
+    public function replaceHeaders(CastHeader|array $headers): self
+    {
+        $clone = clone $this;
+        $clone->headers = (new CastHeader())->merge($headers);
         return $clone;
     }
 
@@ -349,9 +397,13 @@ class CastRequest
         return self::buildUrl($this->url, $this->queryParams);
     }
 
+    /**
+     * A copy of the request's headers: changing it does not change the request — use
+     * {@see withHeader()}, {@see withHeaders()} or {@see withoutHeader()} for that.
+     */
     public function getHeaders(): CastHeader
     {
-        return $this->headers ?? new CastHeader();
+        return $this->headers ? clone $this->headers : new CastHeader();
     }
 
     public function getBody(): mixed

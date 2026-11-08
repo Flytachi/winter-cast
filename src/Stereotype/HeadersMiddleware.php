@@ -75,6 +75,7 @@ class HeadersMiddleware implements CastMiddleware
     {
         $headers = $this->resolveHeaders();
 
+        // Added on top: these headers replace ones of the same name, the request's others stay.
         return $next($request->withHeaders($headers));
     }
 
