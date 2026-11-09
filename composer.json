@@ -1,8 +1,22 @@
 {
     "name": "flytachi/winter-cast",
-    "description": "Winter framework cast component",
+    "description": "PSR-18 HTTP client for PHP 8.4 — immutable, Swoole-aware: concurrent requests, streaming downloads and uploads, retries with deadlines, middleware.",
     "type": "library",
     "license": "MIT",
+    "keywords": [
+        "http",
+        "http-client",
+        "psr-7",
+        "psr-17",
+        "psr-18",
+        "curl",
+        "swoole",
+        "concurrent",
+        "streaming",
+        "retry",
+        "middleware",
+        "winter"
+    ],
     "scripts": {
         "test": "phpunit",
         "test-detail": "phpunit --testdox",
@@ -20,14 +34,27 @@
         }
     },
     "require": {
-        "php": ">=8.3",
-        "flytachi/winter-base": "^1.0 | ^3.0",
+        "php": ">=8.4",
+        "ext-curl": "*",
         "composer-runtime-api": "^2.0",
-        "ext-curl": "*"
+        "flytachi/winter-base": "^3.0",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.1",
+        "psr/http-message": "^2.0",
+        "psr/log": "^3.0"
     },
     "require-dev": {
         "phpunit/phpunit": "@stable",
-        "squizlabs/php_codesniffer": "@stable"
+        "squizlabs/php_codesniffer": "@stable",
+        "php-http/psr7-integration-tests": "^1.5"
+    },
+    "provide": {
+        "psr/http-client-implementation": "1.0",
+        "psr/http-factory-implementation": "1.0",
+        "psr/http-message-implementation": "2.0"
+    },
+    "suggest": {
+        "ext-swoole": "Coroutine-based sendAll() inside Swoole workers"
     },
     "homepage": "https://winterframe.net",
     "support": {

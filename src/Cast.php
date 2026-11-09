@@ -4,151 +4,104 @@ declare(strict_types=1);
 
 namespace Flytachi\Winter\Cast;
 
-use Flytachi\Winter\Cast\Common\CastClient;
-use Flytachi\Winter\Cast\Common\CastRequest;
-use Flytachi\Winter\Cast\Common\CastResponse;
+use Flytachi\Winter\Cast\Client\CastClient;
+use Flytachi\Winter\Cast\Exception\BatchException;
 use Flytachi\Winter\Cast\Exception\CastException;
+use Flytachi\Winter\Cast\Message\CastRequest;
+use Flytachi\Winter\Cast\Message\CastResponse;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\UriInterface;
 
 /**
- * A static facade providing a simple, zero-configuration entry point for making HTTP requests.
- *
- * The Cast facade offers the most convenient way to make HTTP requests without needing to
- * manually instantiate clients or manage dependencies. It maintains a global singleton
- * CastClient instance that is shared across all requests.
- *
- * For advanced usage such as dependency injection, custom timeouts, or multiple client
- * configurations, it is recommended to use CastClient and CastRequest directly.
- *
- * ---
- * ### Example 1: Simple GET request
+ * A request in one line, without configuring anything — for scripts, checks, tests.
  *
  * ```
- * use Flytachi\Winter\Cast\Cast;
- *
- * // One-liner - send immediately
- * $response = Cast::sendGet('https://api.com/users');
- * $users = $response->json();
- *
- * // Or build request first
- * $response = Cast::get('https://api.com/users')
- *     ->withHeaders(
- *         CastHeader::instance()->json()->authBearer($token)
- *     )
- *     ->send();
+ * $ip = Cast::get('https://api.ipify.org', ['format' => 'json'])->send()->json()['ip'];
  * ```
  *
- * ---
- * ### Example 2: POST/PUT with JSON body
- *
- * ```
- * $response = Cast::post('https://api.com/users')
- *     ->withHeaders(CastHeader::instance()->json())
- *     ->withJsonBody([
- *         'name' => 'John Doe',
- *         'email' => 'john@example.com'
- *     ])
- *     ->send();
- *
- * if ($response->isSuccess()) {
- *     $newUser = $response->json();
- *     echo "Created user with ID: {$newUser['id']}";
- * }
- * ```
- *
- * ---
- * ### Example 3: With custom global client
- *
- * ```
- * // Configure global client with custom timeouts
- * $customClient = new CastClient(
- *     defaultTimeout: 30,
- *     defaultConnectTimeout: 10
- * );
- * Cast::setGlobalClient($customClient);
- *
- * // All subsequent requests use custom client
- * $response = Cast::sendGet('https://slow-api.com/data');
- * ```
- * ---
- *
- * @package Flytachi\Winter\Cast
- * @author Flytachi
- *
- * @method static CastRequest get(string $url, ?array $queryParams = null)
- * @method static CastRequest post(string $url, ?array $queryParams = null)
- * @method static CastRequest put(string $url, ?array $queryParams = null)
- * @method static CastRequest patch(string $url, ?array $queryParams = null)
- * @method static CastRequest delete(string $url, ?array $queryParams = null)
- * @method static CastRequest head(string $url, ?array $queryParams = null)
- *
- * @method static CastResponse sendGet(string $url, ?array $queryParams = null)
- * @method static CastResponse sendPost(string $url, ?array $queryParams = null)
- * @method static CastResponse sendPut(string $url, ?array $queryParams = null)
- * @method static CastResponse sendPatch(string $url, ?array $queryParams = null)
- * @method static CastResponse sendDelete(string $url, ?array $queryParams = null)
- * @method static CastResponse sendHead(string $url, ?array $queryParams = null)
- *
- * @see CastClient
- * @see CastRequest
- * @see CastResponse
+ * Everything goes through one default client. In an application prefer a CastClient of your
+ * own (a bean): its settings are visible where it is used, and it is easy to replace in tests.
  */
 final class Cast
 {
-    private static ?CastClient $globalClient = null;
+    private static ?CastClient $client = null;
 
-    /**
-     * Returns the global CastClient instance, creating it if it doesn't exist.
-     *
-     * @return CastClient The shared client instance.
-     */
-    public static function getGlobalClient(): CastClient
+    private function __construct()
     {
-        if (self::$globalClient === null) {
-            self::$globalClient = new CastClient();
-        }
-        return self::$globalClient;
+    }
+
+    /** @param array<string, mixed> $query */
+    public static function get(string|UriInterface $uri, array $query = []): CastRequest
+    {
+        return self::client()->get($uri, $query);
+    }
+
+    /** @param array<string, mixed> $query */
+    public static function post(string|UriInterface $uri, array $query = []): CastRequest
+    {
+        return self::client()->post($uri, $query);
+    }
+
+    /** @param array<string, mixed> $query */
+    public static function put(string|UriInterface $uri, array $query = []): CastRequest
+    {
+        return self::client()->put($uri, $query);
+    }
+
+    /** @param array<string, mixed> $query */
+    public static function patch(string|UriInterface $uri, array $query = []): CastRequest
+    {
+        return self::client()->patch($uri, $query);
+    }
+
+    /** @param array<string, mixed> $query */
+    public static function delete(string|UriInterface $uri, array $query = []): CastRequest
+    {
+        return self::client()->delete($uri, $query);
+    }
+
+    /** @param array<string, mixed> $query */
+    public static function head(string|UriInterface $uri, array $query = []): CastRequest
+    {
+        return self::client()->head($uri, $query);
+    }
+
+    /** @param array<string, mixed> $query */
+    public static function options(string|UriInterface $uri, array $query = []): CastRequest
+    {
+        return self::client()->options($uri, $query);
+    }
+
+    /** @throws CastException */
+    public static function send(RequestInterface $request): CastResponse
+    {
+        return self::client()->send($request);
     }
 
     /**
-     * Allows replacing the default global client with a custom-configured one.
-     * This is useful for setting global timeouts, proxies, or other options application-wide.
+     * @template TKey of array-key
+     * @param iterable<TKey, RequestInterface> $requests
+     * @return array<TKey, CastResponse>
      *
-     * @param CastClient $client The new client instance to use globally.
+     * @throws BatchException
      */
-    public static function setGlobalClient(CastClient $client): void
+    public static function sendAll(iterable $requests, ?int $concurrency = null): array
     {
-        self::$globalClient = $client;
+        return self::client()->sendAll($requests, $concurrency);
+    }
+
+    /** The default client: created on first use with the library's defaults. */
+    public static function client(): CastClient
+    {
+        return self::$client ??= new CastClient();
     }
 
     /**
-     * Forwards static calls to the CastRequest class to start building a request,
-     * then immediately sends it using the global client.
-     *
-     * This magic method allows for simple, one-line requests like:
-     * Cast::sendGet('https://example.com' );
-     *
-     * @param string $method The name of the static method called (e.g., 'sendGet', 'sendPost').
-     * @param array $args The arguments passed to the method.
-     * @return CastRequest|CastResponse
-     * @throws CastException|\BadMethodCallException
+     * Replaces the default client — once, at application start. Requests created before keep
+     * the client they were created with.
      */
-    public static function __callStatic(string $method, array $args): CastRequest|CastResponse
+    public static function setClient(?CastClient $client): void
     {
-        $buildMethods = ['get', 'post', 'put', 'patch', 'delete', 'head'];
-        if (in_array($method, $buildMethods)) {
-            return CastRequest::$method(...$args);
-        }
-
-        $sendPrefix = 'send';
-        if (str_starts_with($method, $sendPrefix)) {
-            $requestMethod = lcfirst(substr($method, strlen($sendPrefix)));
-
-            if (in_array($requestMethod, $buildMethods)) {
-                $request = CastRequest::$requestMethod(...$args);
-                return $request->send(self::getGlobalClient());
-            }
-        }
-
-        throw new \BadMethodCallException("Static method {$method} does not exist on Cast facade.");
+        self::$client = $client;
     }
 }

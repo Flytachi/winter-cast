@@ -4,7 +4,8 @@
          bootstrap="vendor/autoload.php"
          colors="true"
          cacheDirectory=".phpunit.cache"
-         executionOrder="depends,defects"
+         executionOrder="defects"
+         resolveDependencies="true"
          displayDetailsOnTestsThatTriggerWarnings="true"
          failOnRisky="true"
          failOnWarning="true">
@@ -13,10 +14,19 @@
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
         </testsuite>
+        <testsuite name="Psr7">
+            <directory>tests/Psr7</directory>
+        </testsuite>
         <testsuite name="Integration">
             <directory>tests/Integration</directory>
         </testsuite>
     </testsuites>
+
+    <php>
+        <!-- php-http/psr7-integration-tests: build URIs and streams with this library's PSR-17 factory -->
+        <const name="URI_FACTORY" value="Flytachi\Winter\Cast\Factory\CastFactory"/>
+        <const name="STREAM_FACTORY" value="Flytachi\Winter\Cast\Factory\CastFactory"/>
+    </php>
 
     <source>
         <include>
